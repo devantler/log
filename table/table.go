@@ -2,11 +2,11 @@ package table
 
 import (
 	"io"
-	"runtime"
 
 	"github.com/loft-sh/log"
 	"github.com/loft-sh/log/scanner"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 	"github.com/sirupsen/logrus"
 )
 
@@ -15,7 +15,12 @@ func PrintTable(s log.Logger, header []string, values [][]string) {
 }
 
 // PrintTableWithOptions prints a table with header columns and string values
-func PrintTableWithOptions(s log.Logger, header []string, values [][]string, modify func(table *tablewriter.Table)) {
+func PrintTableWithOptions(
+	s log.Logger,
+	header []string,
+	values [][]string,
+	modify func(table *tablewriter.Table),
+) {
 	reader, writer := io.Pipe()
 	defer writer.Close()
 
@@ -29,26 +34,30 @@ func PrintTableWithOptions(s log.Logger, header []string, values [][]string, mod
 		}
 	}()
 
-	table := tablewriter.NewWriter(writer)
-	table.SetHeader(header)
-	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
-		colors := []tablewriter.Colors{}
-		for range header {
-			colors = append(colors, tablewriter.Color(tablewriter.FgGreenColor))
-		}
-		table.SetHeaderColor(colors...)
+	headerAny := make([]any, len(header))
+	for i, h := range header {
+		headerAny[i] = h
 	}
 
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetBorders(tablewriter.Border{Left: false, Top: false, Right: false, Bottom: false})
-	table.AppendBulk(values)
+	table := tablewriter.NewTable(writer,
+		tablewriter.WithHeaderAlignment(tw.AlignLeft),
+		tablewriter.WithRowAlignment(tw.AlignLeft),
+	)
+	table.Header(headerAny...)
+	for _, row := range values {
+		rowAny := make([]any, len(row))
+		for i, v := range row {
+			rowAny[i] = v
+		}
+		_ = table.Append(rowAny...)
+	}
 	if modify != nil {
 		modify(table)
 	}
 
 	// Render
 	_, _ = writer.Write([]byte("\n"))
-	table.Render()
+	_ = table.Render()
 	_, _ = writer.Write([]byte("\n"))
 	_ = writer.Close()
 	<-done
